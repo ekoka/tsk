@@ -2,4 +2,4 @@
 tsk
 ===
 
-a minimal static site generator.
+A minimal static site generator to help publishing books in HTML format.
