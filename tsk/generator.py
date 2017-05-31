@@ -3,10 +3,10 @@ import os
 import shutil
 import re
 import StringIO
-import slugify as _slugify
 import functools
 
 import markdown
+import slugify as _slugify
 from jinja2 import Environment, FileSystemLoader
 
 """
@@ -50,8 +50,12 @@ def tsk_command_include(self, item):
         shutil.copy(item_path, item_output_path)
         return "{{% include 'partials/{item}' %}}".format(item=item)
     except:
-        raise
         return "[ ... ]"
+
+@bound_command
+def tsk_command_anchor(self, *items):
+    anchor = slugify(' '.join(items))
+    return '<p><a id="{anchor}"></a></p>'.format(anchor=anchor)
 
 class Generator(object):
 
@@ -77,7 +81,9 @@ class Generator(object):
             #lstrip_blocks=True,
             #trim_blocks=True
         )
-        self.book = []
+
+        # registery linking input and output names for markdown files
+        self.book = {}
 
     def _markdown_output_filename(self, meta):
         output_file = meta.get('output_file', None)
@@ -86,14 +92,12 @@ class Generator(object):
                 output_file = slugify(meta['title']) + '.html'
             else:
                 output_file = basename_no_ext(meta['input_file']) + '.html'
-        #return os.path.join(self.MARKDOWN_OUTPUT_DIR, output_file)
         return output_file
-
 
     def traverse_markdown_dir(self):
         for f in os.listdir(self.MARKDOWN_PATH):
             f = os.path.join(self.MARKDOWN_PATH, f)
-            if os.path.isfile(f) and f.endswith('.md'):
+            if f!= self.TOC_FILE and f.endswith('.md') and os.path.isfile(f):
                 yield f
 
     def write_output(self, file, data):
@@ -108,12 +112,12 @@ class Generator(object):
         with open(filename, 'r') as f:
             contents = self.process_foreign_commands(f.read())
             contents, meta = self.render_markdown(contents)
-            meta['input_file'] = filename
+            meta['input_file'] = os.path.basename(filename)
             meta['output_file'] = self._markdown_output_filename(meta)
             meta['output_path'] = os.path.join(self.MARKDOWN_OUTPUT_DIR, 
                                                meta['output_file'])
             self.write_output(meta['output_path'], contents)
-            self.book.append(meta)
+            self.book[meta['output_file']] = meta
     
     def process_foreign_commands(self, text):
         rv = ''
@@ -128,6 +132,9 @@ class Generator(object):
         return rv
 
     def register_command(self, command, name=None, bound=False):
+        """
+        extends markdown with user-defined commands.
+        """
         if name is None:
             name = command.__name__
         if not name.startswith(self.TSK_COMMAND_PREFIX):
@@ -182,18 +189,37 @@ class Generator(object):
         for filename in self.traverse_markdown_dir():
             self.process_markdown_file(filename)
 
+    @property
+    def toc(self):
+        if not getattr(self, '_toc', {}) and hasattr(self, 'TOC_FILE'):
+            toc_file = os.path.join(self.MARKDOWN_PATH, self.TOC_FILE)
+            t = TOC(toc_file, self.MARKDOWN_OUTPUT_DIR)
+            t.generate()
+            def _add_md_file(tocdata, bookdata):
+                for p in tocdata['children']:
+                    md_data = bookdata.get(p['url'], {})
+                    md_file = md_data.get('input_file', None)
+                    if md_file:
+                        p['markdown'] = md_file
+                    if p.get('children'):
+                        _add_md_file(p, bookdata)
+            if self.book:
+                _add_md_file(t.toc, self.book)
+            self._toc = t.toc
+        return getattr(self, '_toc', {})
+
     def generate_webpages(self):
         """ 
         Insert book's content within template layout and generate static web
         pages. 
         """
-        if hasattr(self, 'TOC_FILE'):
-            toc_file = os.path.join(self.MARKDOWN_PATH, self.TOC_FILE)
-            toc = TOC(toc_file, self.MARKDOWN_OUTPUT_DIR)
-            toc.generate()
-            toc = toc.toc
+        #if hasattr(self, 'TOC_FILE'):
+        #    toc_file = os.path.join(self.MARKDOWN_PATH, self.TOC_FILE)
+        #    toc = TOC(toc_file, self.MARKDOWN_OUTPUT_DIR)
+        #    toc.generate()
+        #    toc = toc.toc
 
-        for page in self.book:
+        for k, page in self.book.iteritems():
             #with open(page['output_path'], 'r') as p:
             #    contents = p.read().decode('utf8')
             contents_template = 'pages/' + page['output_file']
@@ -201,65 +227,10 @@ class Generator(object):
                         else self.DEFAULT_TEMPLATE)
             output = self.render_jinja_template(
                 contents_template=contents_template, 
-                template=template, data=page, toc=toc)
+                template=template, data=page, toc=self.toc)
             web_file = os.path.join(self.WEB_PAGES_PATH, page['output_file'])
             self.write_output(web_file, output)
 
-    def _page_exists(self, slug):
-        filename = os.path.join(self.MARKDOWN_OUTPUT_DIR, slug+'.html')
-        return os.path.isfile(filename)
-
-    def toc_map(self, toc_content=None):
-        """
-        - navigation should be based on the presence of a file toc.md
-        - if the toc.md isn't present, skip navigation.
-        - a mapping of the toc should be created with slugified titles as keys
-        - if a file matching the key exists an url should be created
-        """
-        toc = {}
-        toc = []
-        marker = '#' # heading_marker
-        after_marker = re.compile(r'[^{}]'.format(marker))
-        bookmark_level = 2
-        page_url = '/'
-        #levels = [marker * i for i in xrange(1, 6)]
-        
-        levels = [0 for i in xrange(5)]
-        def _set_levels(current_level, levels):
-            # increment current level
-            levels[current_level] += 1
-            # reset sublevels
-            for i in xrange(len(levels)):
-                if i > current_level:
-                    levels[i] = 0
-
-        for l in toc_content.splitlines():
-            line = l.strip()
-            if line.startswith(marker):
-                match = after_marker.search(line)
-                level = match.start()-1
-                title = line[level+1:].strip()
-                # first get the corresponding slug
-                slug = slugify(title)
-                chapter_toc = {} # toc.setdefault(slug, {})
-                toc.append(chapter_toc)
-                _set_levels(level, levels)
-                chapter_toc['level'] = levels[:]
-                chapter_toc['title'] = title.decode('utf8')
-                chapter_toc['level_type'] = level
-                # level 0 - 2 have a dedicated page
-                if level >= bookmark_level:
-                    if page_url:
-                        chapter_toc['url'] = '#'.join([page_url, slug])
-                    else:
-                        chapter_toc['url'] = None
-                else:
-                    if self._page_exists(slug):
-                        page_url = '{slug}.html'.format(slug=slug)
-                    else:
-                        page_url = None
-                    chapter_toc['url'] = page_url
-        return toc
 
 class TOC(object):
     """
@@ -273,7 +244,7 @@ class TOC(object):
             self.toc_text = f.read()
         self.PAGE_DIR = page_dir
         self.meta = {}
-        self.toc = []
+        self.toc = {}
         self.set_default_meta(self.meta)
 
     def set_default_meta(self, meta):
@@ -345,9 +316,6 @@ class TOC(object):
         self.toc['page_level'] = self.meta['page_level']
 
     def process_entry(self, entry, hierarchy, parent_entries):
-        #def _empty_entry(level):
-        #    h = hierarchy[:level] + [0 for xrange(level, len(hierarchy))]
-        #    return dict(empty=True, level=level, children=[])
         def _set_hierarchy(entry, parent_entries, hierarchy):
             # increment current level
             current_level = entry['level']
