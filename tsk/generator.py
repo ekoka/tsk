@@ -162,6 +162,9 @@ class Generator(object):
         except UnicodeEncodeError as e: # in case string is already unicode
             pass
          
+        # small hack to allow the meta extension to see the markers
+        text = re.sub(r'^\+\+\+\s*$', '---', text, flags=re.M)
+        # end of hack
         md = markdown.Markdown(extensions=['meta'], output_format='html5')
         html = md.convert(text)
         meta_dict = {k:v for k,v in md.Meta.iteritems() if v}
