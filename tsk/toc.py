@@ -62,14 +62,14 @@ class TOC(object):
                                      hierarchy=hierarchy[:], slug='')
         parent_entries = {root_entry['level']: root_entry}
         for line in self.toc_text.splitlines():
-            if line.strip()=='+-+':
+            if line.strip()=='-/-':
                 comment_mode = not comment_mode
 
             if comment_mode:
                 # skip processing
                 continue
 
-            if line.strip()=='+++': 
+            if line.strip()=='---': 
                 # toggle meta_mode and move on to the next instruction
                 meta_mode = not meta_mode
                 continue

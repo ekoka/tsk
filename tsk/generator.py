@@ -121,27 +121,68 @@ class Generator(object):
 
     def process_markdown_file(self, filename):
         with open(filename, 'r') as f:
-            contents = self.process_foreign_commands(f.read())
-            contents, meta = self.render_markdown(contents)
+            meta, contents = self.preprocess_markdown(f.read())
+            contents = self.render_markdown(contents)
             meta['input_file'] = os.path.basename(filename)
             meta['output_file'] = self._markdown_output_filename(meta)
             meta['output_path'] = os.path.join(self.MARKDOWN_OUTPUT_DIR, 
                                                meta['output_file'])
             self.write_output(meta['output_path'], contents)
             self.book[meta['output_file']] = meta
-    
-    def process_foreign_commands(self, text):
-        rv = ''
+
+    # TODO: testing
+    def preprocess_markdown(self, text):
+        """
+        receive custom/extended markdown, extract meta information, run
+        user-defined commands and return meta dict and standard markdown.
+        """
+        meta = {}
+        meta_mode = False
+        comment_mode = False
+        md = ''
         for line in StringIO.StringIO(text).readlines():
             l = line.strip()
-            if l.startswith('$$'):
+
+            if l=='-/-':
+                comment_mode = not comment_mode
+
+            if comment_mode:
+                # skip processing
+                continue
+
+            if l=='---': 
+                # toggle meta_mode and move on to the next instruction
+                meta_mode = not meta_mode
+                continue
+
+            if meta_mode:
+                # process meta data
+                meta_key, meta_value = self._process_meta_line(l)
+                meta[meta_key] = meta_value
+
+            elif l.startswith('$$'):
                 args = l[2:].strip().split()
                 command = args.pop(0)
-                rv += self.exec_command(command, args)
+                md += self.exec_command(command, args)
             else:
-                rv += line
-        return rv
+                md += line
 
+        return meta, md 
+
+    def _process_meta_line(self, line):
+        # if in meta_mode we grab each key value pair
+        key, value = line.split(':', 1)
+        key = key.strip()
+        value = value.strip().split(',')
+        if len(value)==1:
+            value = value[0]
+        try:
+            # attempt int casting
+            value = int(value)
+        except ValueError:
+            pass
+        return key, value
+    
     def register_command(self, command, name=None, bound=False):
         """
         extends markdown with user-defined commands.
@@ -177,9 +218,9 @@ class Generator(object):
             pass
          
         # small hack to allow the meta extension to see the markers
-        text = re.sub(r'^\+\+\+\s*$', '---', text, flags=re.M)
+        # text = re.sub(r'^\+\+\+\s*$', '---', text, flags=re.M)
         # end of hack
-        md = markdown.Markdown(extensions=['meta'], output_format='html5')
+        md = markdown.Markdown(output_format='html5')
         html = md.convert(text)
         meta_dict = {k:v for k,v in md.Meta.iteritems() if v}
         meta = {}
