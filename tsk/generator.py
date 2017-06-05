@@ -71,17 +71,18 @@ def tsk_command_anchor(self, *items):
 class Generator(object):
 
     TSK_COMMAND_PREFIX = 'tsk_command_'
+    TOC_FILE = None
 
     def __init__(self, config):
         for k, v in config.iteritems():
             setattr(self, k, v)
         # check for must-have configs
-        for c in ['TEMPLATE_PATH', 'MARKDOWN_PATH', 'DEFAULT_TEMPLATE',
+        for mandatory in ['TEMPLATE_PATH', 'MARKDOWN_PATH', 'DEFAULT_TEMPLATE',
                   'WEB_PAGES_PATH', 'MARKDOWN_OUTPUT_DIR']:
             try:
-                a = getattr(self, c)
+                a = getattr(self, mandatory)
             except AttributeError as e:
-                raise TskError('{} must be set.'.format(c))
+                raise TskError('{} must be set.'.format(mandatory))
 
         markdown_partials = os.path.join(self.MARKDOWN_PATH, 'partials')
         if not os.path.exists(markdown_partials):
@@ -143,7 +144,7 @@ class Generator(object):
         for line in StringIO.StringIO(text).readlines():
             l = line.strip()
 
-            if l=='-/-':
+            if l=='-#-':
                 comment_mode = not comment_mode
 
             if comment_mode:
@@ -222,15 +223,7 @@ class Generator(object):
         # end of hack
         md = markdown.Markdown(output_format='html5')
         html = md.convert(text)
-        meta_dict = {k:v for k,v in md.Meta.iteritems() if v}
-        meta = {}
-        #meta = type('anon', (object,), {})
-        for k,v in meta_dict.iteritems():
-            if len(v)==1:
-                meta[k] = v[0]
-            else:
-                meta[k] = v
-        return html, meta
+        return html
 
     def render_jinja_template(self, contents_template, template=None, 
                               data=None, toc=None):
@@ -249,7 +242,7 @@ class Generator(object):
 
     @property
     def toc(self):
-        if not getattr(self, '_toc', {}) and hasattr(self, 'TOC_FILE'):
+        if not getattr(self, '_toc', {}) and self.TOC_FILE:
             toc_file = os.path.join(self.MARKDOWN_PATH, self.TOC_FILE)
             t = TOC(toc_file, self.MARKDOWN_OUTPUT_DIR)
             t.generate()

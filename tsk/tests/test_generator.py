@@ -95,16 +95,16 @@ class GeneratorTest(unittest.TestCase):
         with mock.patch.object(g, 'write_output') as mock_write:
             g.process_markdown_file(file)
 
-    def test_markdown_rendering_should_return_a_meta_dict(self):
+    def test_markdown_preprocessing_should_return_a_meta_dict(self):
         markdown_text = '---\nvar1: abc\nvar2: xyz\n---\n\nsome markdown text'
         g = Generator(self.config)
-        contents, meta = g.render_markdown(markdown_text)
+        meta, contents = g.preprocess_markdown(markdown_text)
         self.assertTrue(isinstance(meta,dict))
 
-    def test_markdown_rendering_populates_instance_with_meta_data(self):
+    def test_markdown_preprocessing_populates_instance_with_meta_data(self):
         markdown_text = '---\nvar1: abc\nvar2: xyz\n---\n\nsome markdown text'
         g = Generator(self.config)
-        contents, meta = g.render_markdown(markdown_text)
+        meta, contents = g.preprocess_markdown(markdown_text)
         self.assertEqual(meta['var1'], 'abc')
         self.assertEqual(meta['var2'], 'xyz')
 
@@ -114,7 +114,7 @@ class GeneratorTest(unittest.TestCase):
         command = 'some_random_cmd'
         text = 'Lorem blabla \n$${}\nIpsum etc'.format(command)
         g = Generator(self.config)
-        g.process_foreign_commands(text)
+        g.preprocess_markdown(text)
         mock_exec_command.assert_called_once_with(command, [])
 
     def test_rendering_jinja_template_calls_get_template_method(self):
@@ -129,7 +129,7 @@ class GeneratorTest(unittest.TestCase):
             g.render_jinja_template('xyz', template='abc', data='data')
             template = mk_gtmp.return_value
             template.render.assert_called_once_with(
-                contents='xyz', data='data', toc=None)
+                contents_template='xyz', data='data', toc=None)
 
     @mock.patch('tsk.generator.os.listdir')
     @mock.patch('tsk.generator.os.path.isfile')
@@ -164,7 +164,8 @@ class GeneratorTest(unittest.TestCase):
         g = Generator(self.config)
         with mock.patch.object(g, 'write_output'):
             g.process_markdown_file('somefile.md')
-        meta = g.book.pop()
+
+        meta = g.book.pop('somefile.html')
         self.assertTrue(meta['output_path'].startswith(
             self.config['MARKDOWN_OUTPUT_DIR']+'/'))
 
@@ -215,13 +216,13 @@ class GeneratorTest(unittest.TestCase):
     def test_markdown_render_should_work_with_unicode_strings(self):
         uc_str = u'some unicode string éà'
         g = Generator(self.config)
-        html, meta = g.render_markdown(uc_str)
+        html = g.render_markdown(uc_str)
         self.assertTrue('some unicode' in html)
 
     def test_markdown_render_should_work_with_utf8_strings(self):
         bin_str = u'some unicode string éà'.encode('utf8')
         g = Generator(self.config)
-        html, meta = g.render_markdown(bin_str)
+        html = g.render_markdown(bin_str)
         self.assertTrue('some unicode' in html)
 
     def test_markdown_render_should_raise_err_with_non_utf8_bin_strings(self):
@@ -232,159 +233,4 @@ class GeneratorTest(unittest.TestCase):
         err_msg = '{!r} codec can\'t'.format('utf8')
         self.assertTrue(str(a.exception).startswith(err_msg))
 
-    @property
-    def _toc_content(self):
-        return """
-        # Chapter 1
-        ## sublevel 1.1
-        ## sublevel 1.2
-        ### sub-sublevel 1.2.1
-        ## sublevel 1.3
 
-        # Chapter 2
-        ### sub-sublevel 2.0.1
-        ## sublevel 2.1
-        ### sub-sublevel 2.1.1
-        #### sub-sub-sublevel 2.1.1.1
-        ## sublevel 2.2
-        """
-
-    #def test_toc_mapper_understands_toc_hierarchy(self):
-    #    g = Generator(self.config)
-    #    toc = g.toc_map(self._toc_content)
-    #    self.assertEqual(toc[0]['level'], [1,0,0,0,0])
-    #    self.assertEqual(toc[1]['level'], [1,1,0,0,0])
-    #    self.assertEqual(toc[5]['level'], [2,0,0,0,0])
-    #    self.assertEqual(toc[6]['level'], [2,0,1,0,0])
-    #    self.assertEqual(toc[7]['level'], [2,1,0,0,0])
-
-    #def test_toc_url_present_if_page_exists(self):
-    #    g = Generator(self.config)
-    #    with mock.patch.object(g, '_page_exists', lambda self: True):
-    #        toc = g.toc_map(self._toc_content)
-    #        self.assertEqual(toc[0]['url'], 'chapter-1.html')
-
-    #def test_toc_url_missing_if_page_missing(self):
-    #    g = Generator(self.config)
-    #    toc = g.toc_map(self._toc_content)
-    #    self.assertTrue(toc[0]['url'] is None)
-    #    self.assertTrue(toc[6]['url'] is None) 
-    #    self.assertTrue(toc[7]['url'] is None)
-
-    #def test_toc_url_points_to_page_for_levels_below_bookmark(self):
-    #    g = Generator(self.config)
-    #    with mock.patch.object(g, '_page_exists', lambda self: True):
-    #        toc = g.toc_map(self._toc_content)
-    #        self.assertEqual(toc[0]['url'], 'chapter-1.html')
-    #        self.assertEqual(toc[1]['url'], 'sublevel-1-1.html')
-    #        self.assertEqual(toc[10]['url'], 'sublevel-2-2.html')
-
-    #def test_toc_url_points_to_anchor_for_levels_at_or_above_bookmark(self):
-    #    g = Generator(self.config)
-    #    with mock.patch.object(g, '_page_exists', lambda self: True):
-    #        toc = g.toc_map(self._toc_content)
-    #        self.assertEqual(toc[3]['url'], 
-    #                         'sublevel-1-2.html#sub-sublevel-1-2-1')
-    #        self.assertEqual(toc[6]['url'], 
-    #                        'chapter-2.html#sub-sublevel-2-0-1')
-    #        self.assertEqual(toc[9]['url'], 
-    #                        'sublevel-2-1.html#sub-sub-sublevel-2-1-1-1')
-
-    #TODO:
-    # test_command_registered_with_provided_name()
-    # test_command_registered_with_name_of_function_when_no_name_provided()
-    # test_command_registration_checks_for_name_collision()
-    # test_registered_command_is_bound_when_flag_active()
-    # test_registered_command_is_force_bound_when_instructed()
-    # test_command_registered_with_prefix
-    # test_partial_input_directory_created_under_markdown_if_non_existent()
-
-    # test_include_command
-
-     
-
-
-# TODO change tests to match the new logic
-@mock.patch('__builtin__.open')
-class Skip_TOC(unittest.TestCase):
-    @property
-    def _toc_contents(self):
-        return """
----
-indent_spacing: 4
-bullet_characters: -*+
-page_level: 1
----
-
-Chapter 1
-    sublevel 1.1
-    sublevel 1.2
-        sub-sublevel 1.2.1
-    sublevel 1.3
-
-Chapter 2
-    sublevel 2.1
-        sub-sublevel 2.1.1
-            sub-sub-sublevel 2.1.1.1
-    sublevel 2.2"""
-
-    def test_toc_mapper_understands_toc_hierarchy(self, mk_open):
-        mk_open.return_value.__enter__.return_value = StringIO.StringIO(
-            self._toc_contents)
-        toc = TOC(None, '')
-        #with mock.patch.object(toc, 'page_exists', lambda self: True):
-        toc.generate()
-        root = toc.toc
-        chapter_1 = toc(0)
-        self.assertEqual(root['level'], -1)
-        self.assertEqual(chapter_1['hierarchy'], [1,0,0,0,0])
-        self.assertEqual(toc(0,0)['hierarchy'], [1,1,0,0,0])
-        self.assertEqual(toc(0,1)['hierarchy'], [1,2,0,0,0])
-        self.assertEqual(toc(0,1,0)['hierarchy'], [1,2,1,0,0])
-        self.assertEqual(toc(1)['hierarchy'], [2,0,0,0,0])
-        self.assertEqual(toc(1,0)['hierarchy'], [2,1,0,0,0])
-
-    #TODO: test_toc_mapper_raises_error_when_hierarchy_is_missing_a_level()
-
-    def test_toc_url_present_if_page_exists(self, mk_open):
-        mk_open.return_value.__enter__.return_value = StringIO.StringIO(
-            self._toc_contents)
-        toc = TOC(None, '')
-        with mock.patch.object(toc, 'page_exists', lambda self: True):
-            toc.generate()
-            self.assertEqual(toc(0)['url'], 'chapter-1.html')
-
-    def test_toc_url_missing_if_page_missing(self, mk_open):
-        mk_open.return_value.__enter__.return_value = StringIO.StringIO(
-            self._toc_contents)
-        toc = TOC(None, '')
-        with mock.patch.object(toc, 'page_exists', lambda self: False):
-            toc.generate()
-            self.assertTrue(toc(0)['url'] is None)
-            self.assertTrue(toc(1)['url'] is None) 
-
-    def test_toc_url_points_to_page_for_levels_below_bookmark(self, mk_open):
-        mk_open.return_value.__enter__.return_value = StringIO.StringIO(
-            self._toc_contents)
-        toc = TOC(None, '')
-        with mock.patch.object(toc, 'page_exists', lambda self: True):
-            toc.generate()
-            self.assertEqual(toc(0)['url'], 'chapter-1.html')
-            self.assertEqual(toc(0,0)['url'], 'sublevel-1-1.html')
-            self.assertEqual(toc(1,1)['url'], 'sublevel-2-2.html')
-
-    def test_toc_url_points_to_upper_level_page_url_for_levels_at_or_above_bookmark(
-            self, mk_open):
-        mk_open.return_value.__enter__.return_value = StringIO.StringIO(
-            self._toc_contents)
-        toc = TOC(None, '')
-        with mock.patch.object(toc, 'page_exists', lambda self: True):
-            toc.generate()
-            self.assertEqual(toc(0,1,0)['url'], 'sublevel-1-2.html')
-            self.assertEqual(toc(1,0,0,0)['url'], 'sublevel-2-1.html')
-    ##TODO: 
-    # test for toc unicode support
-    # test for toc level_type
-    # test for toc comments
-    # test slugify replaces ampersand with `and`
-    # test children
