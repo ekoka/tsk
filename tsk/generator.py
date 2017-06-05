@@ -27,11 +27,23 @@ anchors
 """
 
 def bound_command(command):
+    """
+    add a flag to the user-defined command to specify if it should
+    be executed as a generator-bound method or as a simple function.
+    useful if the function expects the generator as `self` in its signature.
+    """
     command.force_bound = True
     return command
 
 @bound_command
 def tsk_command_include(self, item):
+    """
+    include html partials in the markdown.
+    e.g. for html graphs and tables.
+
+        `$$ include distribution-chart.html` 
+
+    """
     item_path = os.path.join(self.MARKDOWN_PATH, 'partials', item)
     partial_output_dir = os.path.join(self.TEMPLATE_PATH, 'partials')
     if not os.path.exists(partial_output_dir):
@@ -46,6 +58,13 @@ def tsk_command_include(self, item):
 
 @bound_command
 def tsk_command_anchor(self, *items):
+    """
+    include an anchor to the markdown template.
+    e.g.
+
+        `$$ anchor put an in-page anchor here` 
+
+    """
     anchor = slugify(' '.join(items))
     return '<p><a id="{anchor}"></a></p>'.format(anchor=anchor)
 
@@ -139,6 +158,9 @@ class Generator(object):
         setattr(self, name, command)
 
     def exec_command(self, command, args=None):
+        """
+        execute user-defined commands in markdown
+        """
         if not command.startswith(self.TSK_COMMAND_PREFIX):
             command = self.TSK_COMMAND_PREFIX + command
         if args is None:
