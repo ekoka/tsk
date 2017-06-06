@@ -177,11 +177,11 @@ class Generator(object):
         value = value.strip().split(',')
         if len(value)==1:
             value = value[0]
-        try:
-            # attempt int casting
-            value = int(value)
-        except ValueError:
-            pass
+            try:
+                # attempt int casting
+                value = int(value)
+            except ValueError:
+                pass
         return key, value
     
     def register_command(self, command, name=None, bound=False):
