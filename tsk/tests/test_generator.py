@@ -233,4 +233,11 @@ class GeneratorTest(unittest.TestCase):
         err_msg = '{!r} codec can\'t'.format('utf8')
         self.assertTrue(str(a.exception).startswith(err_msg))
 
-
+    def test_markdown_meta_tokenization(self):
+        g = Generator(self.config)
+        meta = "some tokens, in this, string"
+        tokens = g._tokenize_meta(meta)
+        self.assertEqual(tokens, ['some tokens', 'in this', 'string'])
+        meta = "some \\ \\\\ \, tokens, in this, string"
+        tokens = g._tokenize_meta(meta)
+        self.assertEqual(tokens, ['some \\ \\\\ , tokens', 'in this', 'string'])

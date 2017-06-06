@@ -101,7 +101,7 @@ class Generator(object):
         output_file = meta.get('output_file', None)
         if not output_file: 
             if meta.get('title', None):
-                output_file = slugify(meta['title']) + '.html'
+                output_file = slugify(''.join(meta['title'])) + '.html'
             else:
                 output_file = basename_no_ext(meta['input_file']) + '.html'
         return output_file
@@ -154,12 +154,16 @@ class Generator(object):
             if l=='---': 
                 # toggle meta_mode and move on to the next instruction
                 meta_mode = not meta_mode
+                meta_key = None
                 continue
 
             if meta_mode:
                 # process meta data
-                meta_key, meta_value = self._process_meta_line(l)
-                meta[meta_key] = meta_value
+                new_meta_key, meta_value = self._process_meta_line(l)
+                # in case we're just adding a value to the meta
+                # i.e. processing a value in a new line
+                meta_key = new_meta_key or meta_key
+                meta.setdefault(meta_key, []).append(meta_value)
 
             elif l.startswith('$$'):
                 args = l[2:].strip().split()
@@ -172,17 +176,57 @@ class Generator(object):
 
     def _process_meta_line(self, line):
         # if in meta_mode we grab each key value pair
-        key, value = line.split(':', 1)
-        key = key.strip()
-        value = value.strip().split(',')
-        if len(value)==1:
-            value = value[0]
-            try:
-                # attempt int casting
-                value = int(value)
-            except ValueError:
-                pass
+        key = None
+        value = line.split(':', 1)
+        if len(value) > 1:
+            key, value = value
+            value = value.strip()
+            key = key.strip()
+        try:
+            # attempt int casting
+            value = int(value)
+        except ValueError:
+            pass
+        #value = value.strip().split(',')
+        #value = self._tokenize_meta(value)
+        #if len(value)==1:
+        #    value = value[0]
         return key, value
+
+    # TODO: testing
+    def _tokenize_meta(self, string):
+        escape = False
+        escape_char = '\\'
+        last_char = token = ''
+        tokens = []
+        for c in string:
+
+            # handle previous backslash
+            if escape and c==',':
+                escape = False
+                last_char = c
+                continue
+
+            token += last_char
+            if not escape:
+                # handle current backslash
+                if c==escape_char:
+                    escape = True
+                    last_char = c
+                    continue
+                # handle split
+                if c==',':
+                    tokens.append(token.strip())
+                    last_char = token = ''
+                    continue
+
+            escape = False # reset
+            last_char = c
+
+        token += last_char
+        tokens.append(token.strip())
+        return tokens
+
     
     def register_command(self, command, name=None, bound=False):
         """
